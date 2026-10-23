@@ -50,6 +50,31 @@ describe('MyController Integration Tests', () => {
 
 		const resultOrder = await database.query.orders.findFirst({where: eq(orders.id, orderId)});
 		expect(resultOrder!.id).toBe(orderId);
+
+		// Stock 
+		const allProductsAfter = await database.query.products.findMany();
+		const stockByName = Object.fromEntries(allProductsAfter.map(p=>[p.name, p.available]));
+		expect(stockByName).toEqual({
+			'USB Cable':29, // normal 
+			'USB Dongle':0, // normal 
+			'Butter':29, // expirable mais non expiré
+			'Milk':0, // expirable mais expiré
+			'Watermelon':29, // Seasonal dans la saison
+			'Grapes':30 // saesonal pas dans la saison
+		})
+
+		expect(notificationServiceMock.sendDelayNotification).toHaveBeenCalledOnce();
+		expect(notificationServiceMock.sendDelayNotification).toHaveBeenCalledWith(10,'USB Dongle');
+		expect(notificationServiceMock.sendOutOfStockNotification).toHaveBeenCalledOnce();
+		expect(notificationServiceMock.sendOutOfStockNotification).toHaveBeenCalledWith('Grapes');
+		expect(notificationServiceMock.sendExpirationNotification).toHaveBeenCalledOnce();
+		expect(notificationServiceMock.sendExpirationNotification).toHaveBeenCalledWith('Milk',expect.any(Date));
+
+	});
+
+	it('retourne 404 quand la commande est inexistante', async () => {
+		const client = supertest(fastify.server);
+		await client.post('/orders/999/processOrder').expect(404);
 	});
 
 	function createProducts(): ProductInsert[] {
